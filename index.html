@@ -74,11 +74,68 @@
     navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
         .then(stream => { video.srcObject = stream; });
 
+    // --- LÓGICA DE MARCADO PROPORCIONAL (CAMBIO CLAVE AQUÍ) ---
+    function marcarFoto(fuente, lat, lon, esMultiple = false) {
+        const ctx = canvas.getContext('2d');
+        
+        // Obtener la resolución original de la imagen
+        const originalWidth = fuente.videoWidth || fuente.width;
+        const originalHeight = fuente.videoHeight || fuente.height;
+
+        // Establecer el ancho del canvas a 1080px (buena calidad pero no gigante)
+        // y calcular el alto proporcionalmente.
+        canvas.width = 1080; 
+        canvas.height = (originalHeight / originalWidth) * 1080;
+        
+        // Dibujar la foto escalada al tamaño del canvas
+        ctx.drawImage(fuente, 0, 0, canvas.width, canvas.height);
+        
+        // --- Cálculo proporcional para el Logo y Barra (NUEVO) ---
+        // Basamos los tamaños en un porcentaje del ancho de la imagen final (1080px)
+        const factorProporcional = canvas.width / 1000; // factor de escala base
+        
+        // Logo proporcional (aprox 12% del ancho)
+        const logoAnchoProporcional = 120 * factorProporcional; 
+        const logoAltoProporcional = (logoImg.height / logoImg.width) * logoAnchoProporcional;
+        const margenLogo = 30 * factorProporcional;
+        
+        ctx.drawImage(logoImg, canvas.width - logoAnchoProporcional - margenLogo, margenLogo, logoAnchoProporcional, logoAltoProporcional);
+        
+        // Barra inferior proporcional (aprox 10% del alto)
+        const altoBarraProporcional = canvas.height * 0.10;
+        ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+        ctx.fillRect(0, canvas.height - altoBarraProporcional, canvas.width, altoBarraProporcional);
+        
+        ctx.fillStyle = "white";
+        const fechaActual = new Date();
+        
+        // Textos proporcionales
+        ctx.font = `bold ${28 * factorProporcional}px Arial`;
+        const margenTextoX = 25 * factorProporcional;
+        const margenTextoY1 = altoBarraProporcional * 0.40;
+        ctx.fillText(`📍 Valledupar | Op: ${selectorOp.value}`, margenTextoX, canvas.height - altoBarraProporcional + margenTextoY1);
+        
+        ctx.font = `${22 * factorProporcional}px Arial`;
+        const margenTextoY2 = altoBarraProporcional * 0.75;
+        let infoGps = lat ? ` | Lat: ${lat.toFixed(4)} Lon: ${lon.toFixed(4)}` : "";
+        ctx.fillText(`📅 ${fechaActual.toLocaleDateString()} ${infoGps}`, margenTextoX, canvas.height - altoBarraProporcional + margenTextoY2);
+        
+        const base64 = canvas.toDataURL('image/jpeg', 0.8);
+        
+        if (esMultiple) {
+            fotosAParticipar.push(base64);
+        } else {
+            fotosAParticipar = [base64];
+            preview.src = base64;
+            mostrarConfirmacion();
+        }
+    }
+
+    // --- EL RESTO DE LA LÓGICA SE MANTIENE IGUAL ---
     btnCapturar.onclick = () => {
         if (!selectorOp.value) return alert("Selecciona un operador");
         status.style.display = "block";
         status.innerText = "Capturando ubicación...";
-        
         navigator.geolocation.getCurrentPosition(pos => {
             marcarFoto(video, pos.coords.latitude, pos.coords.longitude);
         }, () => {
@@ -96,7 +153,6 @@
         const files = Array.from(e.target.files);
         if (files.length === 0) return;
         
-        // Bloquear botones y mostrar carga
         groupCamara.classList.add('hidden');
         status.style.display = "block";
         fotosAParticipar = [];
@@ -112,47 +168,10 @@
                 };
                 reader.readAsDataURL(files[i]);
             });
-            marcarFoto(img, null, null, true);
+            marcarFoto(img, null, null, true); // null GPS para galería
         }
-        
         mostrarConfirmacionMultiple(files.length);
     };
-
-    function marcarFoto(fuente, lat, lon, esMultiple = false) {
-        const ctx = canvas.getContext('2d');
-        canvas.width = 1080;
-        const originalWidth = fuente.videoWidth || fuente.width;
-        const originalHeight = fuente.videoHeight || fuente.height;
-        canvas.height = (originalHeight / originalWidth) * 1080;
-        
-        ctx.drawImage(fuente, 0, 0, canvas.width, canvas.height);
-        
-        const logoAncho = 60; 
-        const logoAlto = (logoImg.height / logoImg.width) * logoAncho;
-        ctx.drawImage(logoImg, canvas.width - logoAncho - 30, 30, logoAncho, logoAlto);
-        
-        ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
-        ctx.fillRect(0, canvas.height - 100, canvas.width, 100);
-        
-        ctx.fillStyle = "white";
-        const fechaActual = new Date();
-        ctx.font = "bold 28px Arial";
-        ctx.fillText(`📍 Valledupar | Op: ${selectorOp.value}`, 25, canvas.height - 60);
-        
-        ctx.font = "22px Arial";
-        let infoGps = lat ? ` | Lat: ${lat.toFixed(4)} Lon: ${lon.toFixed(4)}` : "";
-        ctx.fillText(`📅 ${fechaActual.toLocaleDateString()} ${infoGps}`, 25, canvas.height - 25);
-        
-        const base64 = canvas.toDataURL('image/jpeg', 0.8);
-        
-        if (esMultiple) {
-            fotosAParticipar.push(base64);
-        } else {
-            fotosAParticipar = [base64];
-            preview.src = base64;
-            mostrarConfirmacion();
-        }
-    }
 
     function mostrarConfirmacion() {
         preview.classList.remove('hidden');
@@ -192,7 +211,6 @@
                 console.error(e);
             }
         }
-
         alert("✅ Todas las imágenes se subieron correctamente.");
         location.reload();
     };
