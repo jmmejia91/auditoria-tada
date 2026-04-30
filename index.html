@@ -7,11 +7,13 @@
     <style>
         body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 20px; background-color: #f0f2f5; text-align: center; }
         .container { max-width: 500px; margin: auto; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        h2 { color: #d32f2f; }
-        select, button { width: 100%; padding: 15px; margin: 10px 0; border-radius: 8px; border: 1px solid #ccc; font-size: 16px; }
-        button { background-color: #d32f2f; color: white; border: none; font-weight: bold; }
-        #video { width: 100%; border-radius: 10px; background: #000; }
+        h2 { color: #d32f2f; margin-bottom: 5px; }
+        select, button { width: 100%; padding: 15px; margin: 10px 0; border-radius: 8px; border: 1px solid #ccc; font-size: 16px; box-sizing: border-box; }
+        button { background-color: #d32f2f; color: white; border: none; font-weight: bold; cursor: pointer; }
+        .secondary-btn { background-color: #555; margin-top: 5px; }
+        #video, #preview { width: 100%; border-radius: 10px; background: #000; margin-top: 10px; }
         #status { display: none; color: #d32f2f; font-weight: bold; margin-top: 10px; }
+        .hidden { display: none !important; }
     </style>
 </head>
 <body>
@@ -29,83 +31,118 @@
     </select>
 
     <video id="video" autoplay playsinline></video>
+    <img id="preview" class="hidden">
     <canvas id="canvas" style="display:none;"></canvas>
     
-    <div id="status">Procesando envío...</div>
-    <button id="btnCapturar">TOMAR FOTO Y ENVIAR</button>
+    <div id="status">Subiendo evidencia a Drive...</div>
+
+    <button id="btnCapturar">TOMAR FOTO</button>
+    <div id="groupConfirmar" class="hidden">
+        <button id="btnEnviar">SÍ, ENVIAR FOTO ✅</button>
+        <button id="btnReintentar" class="secondary-btn">REPETIR FOTO ❌</button>
+    </div>
 </div>
 
 <script>
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
+    const preview = document.getElementById('preview');
     const btnCapturar = document.getElementById('btnCapturar');
+    const btnEnviar = document.getElementById('btnEnviar');
+    const btnReintentar = document.getElementById('btnReintentar');
+    const groupConfirmar = document.getElementById('groupConfirmar');
     const status = document.getElementById('status');
+    const selectorOp = document.getElementById('operador');
     
-    // REEMPLAZA ESTA URL CON TU URL DE APPS SCRIPT (/exec)
+    let fotoProcesadaBlob = null;
+    let datosEnvio = {};
+
+    // URL DE TU SCRIPT
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyH5WtN9TNodRvzdvDtgh0SV2ip9lVDPysZyd59TB40G-SbDE4WM8QbchkqUWIgJcvf/exec";
 
-    // Cargar el logo con el nombre exacto que me pasaste
+    // Cargar logo
     const logoImg = new Image();
     logoImg.src = 'LOGO EXPERIENCIAS DE MARCA 2.0.pdf (2).png'; 
 
+    // Iniciar cámara
     navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
         .then(stream => { video.srcObject = stream; });
 
+    // Acción: Capturar
     btnCapturar.onclick = () => {
-        const op = document.getElementById('operador').value;
-        if (!op) return alert("Selecciona un operador primero.");
-
-        btnCapturar.disabled = true;
-        status.style.display = "block";
+        if (!selectorOp.value) return alert("Selecciona un operador");
 
         navigator.geolocation.getCurrentPosition(pos => {
             const ctx = canvas.getContext('2d');
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             
-            // 1. Dibujar la foto original
+            // 1. Dibujar Foto
             ctx.drawImage(video, 0, 0);
             
-            // 2. Dibujar el LOGO en la esquina superior derecha
-            // Ajustamos el tamaño a 120px de ancho aproximadamente
+            // 2. Dibujar Logo (Esquina Superior Derecha)
             const logoAncho = 120;
             const logoAlto = (logoImg.height / logoImg.width) * logoAncho;
             ctx.drawImage(logoImg, canvas.width - logoAncho - 20, 20, logoAncho, logoAlto);
             
-            // 3. Dibujar la barra de datos inferior (Negra traslúcida)
+            // 3. Barra Inferior
             ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
-            ctx.fillRect(0, canvas.height - 60, canvas.width, 60);
+            ctx.fillRect(0, canvas.height - 70, canvas.width, 70);
             
-            // 4. Escribir los datos (Ciudad, Operador, Fecha, GPS)
+            // 4. Textos
             ctx.fillStyle = "white";
-            ctx.font = "bold 16px Arial";
             const fechaActual = new Date();
-            ctx.fillText(`📍 Valledupar | Op: ${op}`, 15, canvas.height - 35);
+            ctx.font = "bold 18px Arial";
+            ctx.fillText(`📍 Valledupar | Op: ${selectorOp.value}`, 15, canvas.height - 40);
+            ctx.font = "14px Arial";
             ctx.fillText(`📅 ${fechaActual.toLocaleString()} | Lat: ${pos.coords.latitude.toFixed(4)} Lon: ${pos.coords.longitude.toFixed(4)}`, 15, canvas.height - 15);
             
-            // 5. Convertir y enviar
-            const base64 = canvas.toDataURL('image/jpeg', 0.8);
-            enviarADrive(base64, op, fechaActual.toISOString().split('T')[0]);
-        }, err => {
-            alert("Error: Debes permitir el acceso al GPS para continuar.");
-            btnCapturar.disabled = false;
-            status.style.display = "none";
-        });
+            // Guardar datos para envío
+            datosEnvio = {
+                imagen: canvas.toDataURL('image/jpeg', 0.8),
+                operador: selectorOp.value,
+                fecha: fechaActual.toISOString().split('T')[0]
+            };
+
+            // Mostrar vista previa y cambiar botones
+            preview.src = datosEnvio.imagen;
+            preview.classList.remove('hidden');
+            video.classList.add('hidden');
+            btnCapturar.classList.add('hidden');
+            groupConfirmar.classList.remove('hidden');
+
+        }, () => alert("Activa el GPS para tomar la foto"));
     };
 
-    function enviarADrive(base64, operador, fechaStr) {
+    // Acción: Reintentar
+    btnReintentar.onclick = () => {
+        preview.classList.add('hidden');
+        video.classList.remove('hidden');
+        btnCapturar.classList.remove('hidden');
+        groupConfirmar.classList.add('hidden');
+    };
+
+    // Acción: Enviar
+    btnEnviar.onclick = () => {
+        if (!confirm("¿Estás seguro de enviar esta foto?")) return;
+
+        btnEnviar.disabled = true;
+        btnReintentar.disabled = true;
+        status.style.display = "block";
+
         fetch(WEB_APP_URL, {
             method: "POST",
             mode: "no-cors",
-            body: JSON.stringify({ imagen: base64, operador: operador, fecha: fechaStr })
+            body: JSON.stringify(datosEnvio)
         }).then(() => {
-            alert("✅ Evidencia cargada correctamente en Drive.");
+            alert("✅ Evidencia cargada correctamente.");
             location.reload();
         }).catch(e => {
-            alert("Error al subir: " + e);
-            btnCapturar.disabled = false;
+            alert("Error: " + e);
+            btnEnviar.disabled = false;
+            btnReintentar.disabled = false;
         });
-    }
+    };
 </script>
 </body>
 </html>
