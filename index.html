@@ -54,21 +54,14 @@
     const status = document.getElementById('status');
     const selectorOp = document.getElementById('operador');
     
-    let fotoProcesadaBlob = null;
-    let datosEnvio = {};
-
-    // URL DE TU SCRIPT
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyH5WtN9TNodRvzdvDtgh0SV2ip9lVDPysZyd59TB40G-SbDE4WM8QbchkqUWIgJcvf/exec";
 
-    // Cargar logo
     const logoImg = new Image();
     logoImg.src = 'LOGO EXPERIENCIAS DE MARCA 2.0.pdf (2).png'; 
 
-    // Iniciar cámara
     navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
         .then(stream => { video.srcObject = stream; });
 
-    // Acción: Capturar
     btnCapturar.onclick = () => {
         if (!selectorOp.value) return alert("Selecciona un operador");
 
@@ -77,19 +70,16 @@
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             
-            // 1. Dibujar Foto
             ctx.drawImage(video, 0, 0);
             
-            // 2. Dibujar Logo (Esquina Superior Derecha)
-            const logoAncho = 120;
+            // --- CAMBIO AQUÍ: Logo un 50% más pequeño (de 120 a 60) ---
+            const logoAncho = 60; 
             const logoAlto = (logoImg.height / logoImg.width) * logoAncho;
             ctx.drawImage(logoImg, canvas.width - logoAncho - 20, 20, logoAncho, logoAlto);
             
-            // 3. Barra Inferior
             ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
             ctx.fillRect(0, canvas.height - 70, canvas.width, 70);
             
-            // 4. Textos
             ctx.fillStyle = "white";
             const fechaActual = new Date();
             ctx.font = "bold 18px Arial";
@@ -97,14 +87,12 @@
             ctx.font = "14px Arial";
             ctx.fillText(`📅 ${fechaActual.toLocaleString()} | Lat: ${pos.coords.latitude.toFixed(4)} Lon: ${pos.coords.longitude.toFixed(4)}`, 15, canvas.height - 15);
             
-            // Guardar datos para envío
             datosEnvio = {
                 imagen: canvas.toDataURL('image/jpeg', 0.8),
                 operador: selectorOp.value,
                 fecha: fechaActual.toISOString().split('T')[0]
             };
 
-            // Mostrar vista previa y cambiar botones
             preview.src = datosEnvio.imagen;
             preview.classList.remove('hidden');
             video.classList.add('hidden');
@@ -114,7 +102,6 @@
         }, () => alert("Activa el GPS para tomar la foto"));
     };
 
-    // Acción: Reintentar
     btnReintentar.onclick = () => {
         preview.classList.add('hidden');
         video.classList.remove('hidden');
@@ -122,10 +109,7 @@
         groupConfirmar.classList.add('hidden');
     };
 
-    // Acción: Enviar
     btnEnviar.onclick = () => {
-        if (!confirm("¿Estás seguro de enviar esta foto?")) return;
-
         btnEnviar.disabled = true;
         btnReintentar.disabled = true;
         status.style.display = "block";
