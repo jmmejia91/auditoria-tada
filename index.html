@@ -5,22 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Auditoría TaDa - Valledupar</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background-color: #f0f2f5; text-align: center; }
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 20px; background-color: #f0f2f5; text-align: center; }
         .container { max-width: 500px; margin: auto; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         h2 { color: #d32f2f; }
         select, button { width: 100%; padding: 15px; margin: 10px 0; border-radius: 8px; border: 1px solid #ccc; font-size: 16px; }
-        button { background-color: #d32f2f; color: white; border: none; font-weight: bold; cursor: pointer; }
-        button:disabled { background-color: #ccc; }
-        #preview { width: 100%; border-radius: 10px; display: none; margin-top: 10px; }
+        button { background-color: #d32f2f; color: white; border: none; font-weight: bold; }
         #video { width: 100%; border-radius: 10px; background: #000; }
-        .loading { display: none; color: #666; font-style: italic; }
+        #status { display: none; color: #d32f2f; font-weight: bold; margin-top: 10px; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <h2>📸 Auditoría TaDa</h2>
-    <p>Valledupar, Cesar</p>
     
     <select id="operador">
         <option value="">Seleccione Operador...</option>
@@ -33,106 +30,82 @@
 
     <video id="video" autoplay playsinline></video>
     <canvas id="canvas" style="display:none;"></canvas>
-    <img id="preview" alt="Vista previa">
-
-    <div id="status" class="loading">Procesando y enviando... por favor espere.</div>
     
+    <div id="status">Procesando envío...</div>
     <button id="btnCapturar">TOMAR FOTO Y ENVIAR</button>
 </div>
 
 <script>
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
-    const preview = document.getElementById('preview');
     const btnCapturar = document.getElementById('btnCapturar');
     const status = document.getElementById('status');
     
-    // AQUÍ PEGA TU URL DE GOOGLE APPS SCRIPT
+    // REEMPLAZA ESTA URL CON TU URL DE APPS SCRIPT (/exec)
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyH5WtN9TNodRvzdvDtgh0SV2ip9lVDPysZyd59TB40G-SbDE4WM8QbchkqUWIgJcvf/exec";
 
-    // Iniciar cámara trasera automáticamente
-    navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: "environment" }, 
-        audio: false 
-    }).then(stream => {
-        video.srcObject = stream;
-    }).catch(err => {
-        alert("Error al acceder a la cámara. Asegúrate de dar permisos.");
-    });
+    // Cargar el logo con el nombre exacto que me pasaste
+    const logoImg = new Image();
+    logoImg.src = 'LOGO EXPERIENCIAS DE MARCA 2.0.pdf (2).png'; 
 
-    btnCapturar.addEventListener('click', () => {
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+        .then(stream => { video.srcObject = stream; });
+
+    btnCapturar.onclick = () => {
         const op = document.getElementById('operador').value;
-        if (!op) {
-            alert("Por favor selecciona un operador primero.");
-            return;
-        }
+        if (!op) return alert("Selecciona un operador primero.");
 
         btnCapturar.disabled = true;
         status.style.display = "block";
 
-        // Obtener ubicación GPS
         navigator.geolocation.getCurrentPosition(pos => {
-            procesarYEnviar(pos.coords.latitude, pos.coords.longitude, op);
+            const ctx = canvas.getContext('2d');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            
+            // 1. Dibujar la foto original
+            ctx.drawImage(video, 0, 0);
+            
+            // 2. Dibujar el LOGO en la esquina superior derecha
+            // Ajustamos el tamaño a 120px de ancho aproximadamente
+            const logoAncho = 120;
+            const logoAlto = (logoImg.height / logoImg.width) * logoAncho;
+            ctx.drawImage(logoImg, canvas.width - logoAncho - 20, 20, logoAncho, logoAlto);
+            
+            // 3. Dibujar la barra de datos inferior (Negra traslúcida)
+            ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+            ctx.fillRect(0, canvas.height - 60, canvas.width, 60);
+            
+            // 4. Escribir los datos (Ciudad, Operador, Fecha, GPS)
+            ctx.fillStyle = "white";
+            ctx.font = "bold 16px Arial";
+            const fechaActual = new Date();
+            ctx.fillText(`📍 Valledupar | Op: ${op}`, 15, canvas.height - 35);
+            ctx.fillText(`📅 ${fechaActual.toLocaleString()} | Lat: ${pos.coords.latitude.toFixed(4)} Lon: ${pos.coords.longitude.toFixed(4)}`, 15, canvas.height - 15);
+            
+            // 5. Convertir y enviar
+            const base64 = canvas.toDataURL('image/jpeg', 0.8);
+            enviarADrive(base64, op, fechaActual.toISOString().split('T')[0]);
         }, err => {
-            alert("Error de GPS. Por favor activa la ubicación.");
+            alert("Error: Debes permitir el acceso al GPS para continuar.");
             btnCapturar.disabled = false;
             status.style.display = "none";
         });
-    });
+    };
 
-    function procesarYEnviar(lat, lon, operador) {
-        const ctx = canvas.getContext('2d');
-        
-        // Ajustar tamaño del canvas al video
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        
-        // Dibujar la foto
-        ctx.drawImage(video, 0, 0);
-        
-        // Estilo de la marca de agua
-        const altoBarra = 60;
-        ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
-        ctx.fillRect(0, canvas.height - altoBarra, canvas.width, altoBarra);
-        
-        ctx.fillStyle = "white";
-        ctx.font = "bold 16px Arial";
-        
-        const fecha = new Date();
-        const texto1 = `📍 Valledupar, Cesar | Op: ${operador}`;
-        const texto2 = `📅 ${fecha.toLocaleString()} | Lat: ${lat.toFixed(5)} Lon: ${lon.toFixed(5)}`;
-        
-        ctx.fillText(texto1, 15, canvas.height - 35);
-        ctx.fillText(texto2, 15, canvas.height - 15);
-        
-        // Convertir a formato que Google Drive entiende (Base64)
-        const imagenBase64 = canvas.toDataURL('image/jpeg', 0.8);
-        
-        // Mostrar vista previa en pantalla
-        preview.src = imagenBase64;
-        preview.style.display = "block";
-        video.style.display = "none";
-
-        // Enviar a Google Apps Script
-        const datos = {
-            imagen: imagenBase64,
-            operador: operador,
-            fecha: fecha.toISOString().split('T')[0]
-        };
-
+    function enviarADrive(base64, operador, fechaStr) {
         fetch(WEB_APP_URL, {
             method: "POST",
             mode: "no-cors",
-            body: JSON.stringify(datos)
+            body: JSON.stringify({ imagen: base64, operador: operador, fecha: fechaStr })
         }).then(() => {
-            alert("✅ ¡Foto enviada con éxito a Google Drive!");
-            location.reload(); // Recargar para tomar otra
-        }).catch(err => {
-            alert("Error al enviar: " + err);
+            alert("✅ Evidencia cargada correctamente en Drive.");
+            location.reload();
+        }).catch(e => {
+            alert("Error al subir: " + e);
             btnCapturar.disabled = false;
         });
     }
 </script>
-
 </body>
 </html>
