@@ -13,7 +13,7 @@
         .secondary-btn { background-color: #555; margin-top: 5px; }
         .gallery-btn { background-color: #2e7d32; }
         #video, #preview { width: 100%; border-radius: 10px; background: #000; margin-top: 10px; }
-        #status { display: none; color: #d32f2f; font-weight: bold; margin-top: 10px; }
+        #status { display: none; background-color: #fff9c4; padding: 15px; border-radius: 8px; color: #856404; font-weight: bold; margin-top: 10px; border: 1px solid #ffeeba; }
         .hidden { display: none !important; }
         #fileInput { display: none; }
     </style>
@@ -74,9 +74,11 @@
     navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
         .then(stream => { video.srcObject = stream; });
 
-    // --- LÓGICA CÁMARA ---
     btnCapturar.onclick = () => {
         if (!selectorOp.value) return alert("Selecciona un operador");
+        status.style.display = "block";
+        status.innerText = "Capturando ubicación...";
+        
         navigator.geolocation.getCurrentPosition(pos => {
             marcarFoto(video, pos.coords.latitude, pos.coords.longitude);
         }, () => {
@@ -85,7 +87,6 @@
         });
     };
 
-    // --- LÓGICA GALERÍA ---
     btnGaleria.onclick = () => {
         if (!selectorOp.value) return alert("Selecciona un operador");
         fileInput.click();
@@ -95,13 +96,23 @@
         const files = Array.from(e.target.files);
         if (files.length === 0) return;
         
+        // Bloquear botones y mostrar carga
+        groupCamara.classList.add('hidden');
         status.style.display = "block";
-        progressText.innerText = "Procesando imágenes...";
         fotosAParticipar = [];
 
-        for (let file of files) {
-            const img = await createImageBitmap(file);
-            marcarFoto(img, null, null, true); // null para no mostrar GPS
+        for (let i = 0; i < files.length; i++) {
+            status.innerText = `⏳ Cargando fotos de galería (${i + 1} de ${files.length})...`;
+            const img = await new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const tempImg = new Image();
+                    tempImg.onload = () => resolve(tempImg);
+                    tempImg.src = event.target.result;
+                };
+                reader.readAsDataURL(files[i]);
+            });
+            marcarFoto(img, null, null, true);
         }
         
         mostrarConfirmacionMultiple(files.length);
@@ -109,18 +120,17 @@
 
     function marcarFoto(fuente, lat, lon, esMultiple = false) {
         const ctx = canvas.getContext('2d');
-        // Ajustar resolución para que no pesen tanto
         canvas.width = 1080;
-        canvas.height = (fuente.videoHeight || fuente.height) / (fuente.videoWidth || fuente.width) * 1080;
+        const originalWidth = fuente.videoWidth || fuente.width;
+        const originalHeight = fuente.videoHeight || fuente.height;
+        canvas.height = (originalHeight / originalWidth) * 1080;
         
         ctx.drawImage(fuente, 0, 0, canvas.width, canvas.height);
         
-        // Logo (Esq. Superior Derecha)
-        const logoAncho = 120;
+        const logoAncho = 60; 
         const logoAlto = (logoImg.height / logoImg.width) * logoAncho;
         ctx.drawImage(logoImg, canvas.width - logoAncho - 30, 30, logoAncho, logoAlto);
         
-        // Barra Inferior
         ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
         ctx.fillRect(0, canvas.height - 100, canvas.width, 100);
         
@@ -131,7 +141,7 @@
         
         ctx.font = "22px Arial";
         let infoGps = lat ? ` | Lat: ${lat.toFixed(4)} Lon: ${lon.toFixed(4)}` : "";
-        ctx.fillText(`📅 ${fechaActual.toLocaleString()}${infoGps}`, 25, canvas.height - 25);
+        ctx.fillText(`📅 ${fechaActual.toLocaleDateString()} ${infoGps}`, 25, canvas.height - 25);
         
         const base64 = canvas.toDataURL('image/jpeg', 0.8);
         
@@ -153,9 +163,8 @@
     }
 
     function mostrarConfirmacionMultiple(cantidad) {
-        status.innerHTML = `📸 ${cantidad} fotos listas para subir.`;
+        status.innerText = `📸 ${cantidad} fotos procesadas y listas para subir.`;
         status.style.display = "block";
-        groupCamara.classList.add('hidden');
         groupConfirmar.classList.remove('hidden');
     }
 
@@ -163,20 +172,25 @@
 
     btnEnviar.onclick = async () => {
         btnEnviar.disabled = true;
+        btnReintentar.disabled = true;
         status.style.display = "block";
         const total = fotosAParticipar.length;
 
         for (let i = 0; i < total; i++) {
-            progressText.innerText = `Subiendo ${i + 1} de ${total}...`;
-            await fetch(WEB_APP_URL, {
-                method: "POST",
-                mode: "no-cors",
-                body: JSON.stringify({
-                    imagen: fotosAParticipar[i],
-                    operador: selectorOp.value,
-                    fecha: new Date().toISOString().split('T')[0]
-                })
-            });
+            status.innerText = `🚀 Subiendo a Drive: ${i + 1} de ${total}...`;
+            try {
+                await fetch(WEB_APP_URL, {
+                    method: "POST",
+                    mode: "no-cors",
+                    body: JSON.stringify({
+                        imagen: fotosAParticipar[i],
+                        operador: selectorOp.value,
+                        fecha: new Date().toISOString().split('T')[0]
+                    })
+                });
+            } catch (e) {
+                console.error(e);
+            }
         }
 
         alert("✅ Todas las imágenes se subieron correctamente.");
